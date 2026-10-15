@@ -1,7 +1,9 @@
 import json
 import re
 import time
-from openai import OpenAI
+import urllib.request
+
+from openai import BadRequestError, OpenAI
 
 from agentcore.llm.LLMConfig import LLMConfig
 
@@ -12,6 +14,8 @@ class BaseLLM:
         self.base_url = llm_config.base_url
         self.temperature: float = llm_config.temperature
         self.top_p: float = llm_config.top_p
+        self.top_k: int = llm_config.top_k
+        self.presence_penalty: float = llm_config.presence_penalty
         self.seed: int = llm_config.seed
         self.enable_thinking: bool = llm_config.enable_thinking
         self.max_output_tokens: int = llm_config.max_output_tokens
@@ -33,9 +37,13 @@ class BaseLLM:
             kwargs["top_p"] = self.top_p
         if self.seed is not None:
             kwargs["seed"] = self.seed
+        if self.presence_penalty is not None:
+            kwargs["presence_penalty"] = self.presence_penalty
         kwargs["extra_body"] = {
             "chat_template_kwargs": {"enable_thinking": self.enable_thinking},
         }
+        if self.top_k is not None:
+            kwargs["extra_body"]["top_k"] = self.top_k
         return kwargs
 
     def reset_trace(self):
@@ -71,6 +79,27 @@ class VLLMLLM(BaseLLM):
             timeout=1200,  # 20-min timeout to avoid infinite hangs from vLLM
         )
 
+    def _server_get(self, path: str, body: dict = None) -> dict:
+        """GET (or POST ``body`` to) ``path`` on the vLLM server, outside the /v1 prefix."""
+        url = re.sub(r"/v1/?$", "", self.base_url) + path
+        data = json.dumps(body).encode() if body is not None else None
+        request = urllib.request.Request(url, data, {"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return json.loads(response.read())
+
+    def _room_for_output(self, messages: list) -> int | None:
+        """Output tokens that still fit in the server's context window after the prompt, or None if unknown."""
+        try:
+            window = next(m["max_model_len"] for m in self._server_get("/v1/models")["data"]
+                         if m["id"] == self.llm_name)
+            prompt = self._server_get("/tokenize", {
+                "model": self.llm_name, "messages": messages, "add_generation_prompt": True,
+                "chat_template_kwargs": {"enable_thinking": self.enable_thinking},
+            })["count"]
+        except Exception:
+            return None
+        return window - prompt
+
     @staticmethod
     def _extract_think_block(text: str) -> tuple:
         """Extract <think>...</think> block and return (thinking, stripped_content)."""
@@ -100,17 +129,20 @@ class VLLMLLM(BaseLLM):
 
         max_retries = 3
         retry_delay = 30
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt},
+        ]
+        max_output_tokens = self.max_output_tokens
 
         for attempt in range(max_retries):
             try:
                 kwargs = dict(
                     model=self.llm_name,
-                    messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt},
-                    ],
+                    messages=messages,
                     **self._build_sampling_kwargs(),
                 )
+                kwargs["max_completion_tokens"] = max_output_tokens
                 # only add stop words when disable thinking, since stop words can also apply to reasoning process
                 if not self.enable_thinking:
                     kwargs["stop"] = ["\nObservation: "]
@@ -138,6 +170,17 @@ class VLLMLLM(BaseLLM):
                 )
                 return stripped
 
+            except BadRequestError as e:
+                # prompt + max_output_tokens exceeds the window: the request is rejected outright, so shrink the
+                # output budget to what fits (once) instead of failing; a prompt that fills the window still fails
+                too_long = "context length" in str(e) or "max_model_len" in str(e)  # vLLM words it both ways
+                if too_long and max_output_tokens == self.max_output_tokens:
+                    room = self._room_for_output(messages)
+                    if room is not None and 0 < room < max_output_tokens:
+                        print(f"[vLLM] prompt leaves {room} of {max_output_tokens} output tokens; retrying with {room}")
+                        max_output_tokens = room
+                        continue
+                raise
             except Exception as e:
                 error_message = str(e).lower()
                 is_retriable = any(keyword in error_message for keyword in [

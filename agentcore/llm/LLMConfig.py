@@ -11,8 +11,11 @@ class LLMConfig:
         self.config_dict = config_dict
         
         self.llm_name = config_dict.get("llm_name", DEFAULT_LLM_NAME)
+        # Sampling: None leaves the value to the server (vLLM applies the model's generation_config).
         self.temperature = None
         self.top_p = None
+        self.top_k = None
+        self.presence_penalty = None
         self.seed = None
         self.enable_thinking: bool = True
         self.max_output_tokens: int = 65536

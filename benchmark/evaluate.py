@@ -7,6 +7,7 @@ import re
 import sys
 import threading
 import traceback
+import urllib.request
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -234,9 +235,45 @@ def evaluate_travelplan(data, llm, args, log_dir, sample_index):
     return finish_task("travelplan", data["id"], result["sub_successes"], result["answer_pairs"], state, llm, log_dir)
 
 
+def sampling_config(args):
+    """Agent sampling parameters given on the command line; the ones left out stay with the server's defaults."""
+    names = ("temperature", "top_p", "top_k", "presence_penalty")
+    return {name: getattr(args, name) for name in names if getattr(args, name) is not None}
+
+
+def served_model(base_url):
+    """The single model served at base_url (for --llm auto)."""
+    with urllib.request.urlopen(base_url.rstrip("/") + "/models", timeout=30) as response:
+        models = [model["id"] for model in json.loads(response.read())["data"]]
+    if len(models) != 1:
+        raise ValueError(f"--llm auto needs exactly one served model at {base_url}, found {models}")
+    return models[0]
+
+
+def run_with_retries(pending, run_one, workers, max_errors):
+    """Run run_one(task_id) for every task, again for the ones that return their id (an exception), at most
+    max_errors runs each. Returns the tasks given up on."""
+    errors = dict.fromkeys(pending, 0)
+    given_up = []
+    while pending:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(run_one, task_id) for task_id in pending]
+            pending = [task_id for future in as_completed(futures) if (task_id := future.result()) is not None]
+        for task_id in pending:
+            errors[task_id] += 1
+        stop = sorted(task_id for task_id in pending if errors[task_id] >= max_errors)
+        if stop:
+            print(f"Giving up on tasks after {max_errors} errors (see task_<id>_error.log): {stop}")
+            given_up += stop
+        pending = [task_id for task_id in pending if errors[task_id] < max_errors]
+        if pending:
+            print(f"Retrying errored tasks: {sorted(pending)}")
+    return given_up
+
+
 def evaluate_task(data, args, log_dir, sample_index, resources):
     # Each worker owns its LLM trace, agent state and mutable environment.
-    llm = get_llm_backend(LLMConfig({"llm_name": args.llm, "base_url": args.base_url}))
+    llm = get_llm_backend(LLMConfig({"llm_name": args.llm, "base_url": args.base_url, **sampling_config(args)}))
     with llm.client:
         if args.dataset == "webshop":
             return evaluate_webshop(data, llm, args, log_dir)
@@ -259,9 +296,16 @@ if __name__ == "__main__":
     parser.add_argument("--debug", action="store_true", help="Include full prompts in agent logs")
     parser.add_argument("--judge_llm", default="", help="Math/Physics judge model at --base_url; uses --llm when omitted")
     parser.add_argument("--max_steps", type=int, default=50, help="Execution-step budget per subtask")
+    parser.add_argument("--max_task_errors", type=int, default=5,
+                        help="Runs of a task that may end in an exception before it is given up (left out of results.csv, "
+                             "so a later run with the same --log_dir tries it again)")
+    for name, kind in (("temperature", float), ("top_p", float), ("top_k", int), ("presence_penalty", float)):
+        parser.add_argument(f"--{name}", type=kind, help="Agent sampling; omitted = the server's default")
     args = parser.parse_args()
+    if args.llm == "auto":
+        args.llm = served_model(args.base_url)
 
-    for name in ("num", "workers", "max_steps"):
+    for name in ("num", "workers", "max_steps", "max_task_errors"):
         if getattr(args, name) < 1:
             raise ValueError(f"{name} must be >= 1")
     if args.max_retry_num < 0:
@@ -319,13 +363,12 @@ if __name__ == "__main__":
         print(f"Task {task_id}: SR={int(result['task_success'])}, subtasks={result['sub_scores']}")
         return None
 
-    while pending:
-        with ThreadPoolExecutor(max_workers=args.workers) as executor:
-            futures = [executor.submit(run_and_log, task_id) for task_id in pending]
-            pending = [task_id for future in as_completed(futures) if (task_id := future.result()) is not None]
-        if pending:
-            print(f"Retrying errored tasks: {sorted(pending)}")
-    rows = [line.split("\t") for line in result_file.read_text().splitlines() if line.strip()]
+    run_with_retries(pending, run_and_log, args.workers, args.max_task_errors)
+    rows = [line.split("\t") for line in result_file.read_text().splitlines() if line.strip()] \
+        if result_file.exists() else []
     scores = [score for row in rows for score in json.loads(row[1])]
     successes = sum(int(row[2]) for row in rows)
     print(f"Tasks evaluated: {len(rows)}\nSR: {successes}/{len(rows)}\nPS: {sum(scores)}/{len(scores)}")
+    missing = sorted(set(selected) - {int(row[0]) for row in rows})
+    if missing:
+        print(f"Tasks without a result (errored): {missing}")

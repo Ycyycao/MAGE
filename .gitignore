@@ -17,3 +17,5 @@ benchmark/**/logs/
 benchmark/webshop/WebShopEnv/search_engine/indexes*/
 benchmark/webshop/WebShopEnv/search_engine/resources*/
 benchmark/webshop/WebShopEnv/subreward_log/
+# Local environments
+.venv/
