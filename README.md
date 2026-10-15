@@ -116,6 +116,31 @@ cd benchmark/phys
 mkdir -p data && cd data && wget https://huggingface.co/datasets/ZexueHe/memoryarena/resolve/main/formal_reasoning_phys/data.jsonl && cd ../..
 ```
 
+## 🔧 This fork: running elsewhere
+
+This branch keeps MAGE's agent, memory and evaluation logic as released and changes only how it is set up and launched.
+Without new flags or variables, a run sends the same requests as upstream.
+
+- **No conda needed.** `bash scripts/setup_uv.sh core` makes a `.venv` with what math, phys and travelplan need and
+  downloads their data (`all` installs everything in `requirements.txt`). `run.sh` uses the conda env `mage` when there
+  is one, else this `.venv`, or `MAGE_PYTHON`.
+- **Mirrors.** The data downloads (`benchmark/download_data.sh`, the WebShop and WebSearch setup scripts) go through
+  `HF_ENDPOINT` when it is set, e.g. `HF_ENDPOINT=https://hf-mirror.com`.
+- **Any served model.** `bash run.sh math http://127.0.0.1:8100/v1 auto` uses the one model served there.
+  `WORKERS`, `VLLM_EMBEDDING_URL` and `MAGE_JAVA_HOME` override run.sh's defaults; see `bash run.sh --help`.
+- **Resuming.** `RUN_NAME=<name> bash run.sh ...` writes to `logs/<dataset>/<name>/`; running it again skips the tasks
+  already in its `results.csv`.
+- **Sampling.** `EXTRA_ARGS="--temperature 1.0 --top_p 0.95 --top_k 20 --presence_penalty 1.5"` sets the agent's
+  sampling (the flags are `evaluate.py`'s). Left out, the server's defaults apply, as upstream.
+- **Long prompts.** When the prompt plus `max_output_tokens` (65536) does not fit the server's window, the request is
+  sent again with the output budget that fits, instead of failing.
+- **Errored tasks.** A task that raises is re-run at most `--max_task_errors` times (default 5) instead of forever; it
+  stays out of `results.csv`, so the next run with the same `RUN_NAME` tries it again.
+- **@1 per task.** The retries (`--max_retry_num`) are triggered by comparing the answers with the gold ones, so only
+  the first attempt can be compared with methods that get no such retry. `python benchmark/export_results.py <run dir>`
+  writes each task's @1 scores and tokens next to the final ones (`tasks.jsonl`).
+- Offline tests of these changes: `.venv/bin/python -m pytest -q tests` (install `pytest` into the `.venv` first).
+
 ## 📘 Acknowledgements
 
 If you find this work useful, please consider citing our paper:
