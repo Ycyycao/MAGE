@@ -9,13 +9,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 WHAT="${1:-core}"
 [ -x .venv/bin/python ] || uv venv --python "${MAGE_PYTHON_VERSION:-3.12}" .venv
-export VIRTUAL_ENV="$PWD/.venv"
+PIP=(uv pip install --python .venv/bin/python)  # explicit: a UV_PYTHON in the environment would win over VIRTUAL_ENV
 case "$WHAT" in
     core)
-        uv pip install --no-deps -e .
+        "${PIP[@]}" --no-deps -e .
         grep -E '^(openai|requests|pydantic|sympy|antlr4|beautifulsoup4)' requirements.txt | sed 's/ //g' \
-            | xargs uv pip install ;;
-    all) uv pip install -e . ;;
+            | xargs "${PIP[@]}" ;;
+    all) "${PIP[@]}" -e . ;;
     *) echo "usage: $0 [core|all]" >&2; exit 2 ;;
 esac
 bash benchmark/download_data.sh
