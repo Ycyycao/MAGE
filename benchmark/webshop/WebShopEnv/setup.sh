@@ -14,10 +14,10 @@ python -m spacy download en_core_web_lg
 # Download dataset into `data` folder
 mkdir -p data
 cd data
-wget https://huggingface.co/datasets/YWZBrandon/webshop-data/resolve/main/items_shuffle.json
-wget https://huggingface.co/datasets/YWZBrandon/webshop-data/resolve/main/items_ins_v2.json
-wget https://huggingface.co/datasets/YWZBrandon/webshop-data/resolve/main/items_human_ins.json
-wget https://huggingface.co/datasets/ZexueHe/memoryarena/resolve/main/bundled_shopping/data.jsonl
+wget "${HF_ENDPOINT:-https://huggingface.co}/datasets/YWZBrandon/webshop-data/resolve/main/items_shuffle.json"
+wget "${HF_ENDPOINT:-https://huggingface.co}/datasets/YWZBrandon/webshop-data/resolve/main/items_ins_v2.json"
+wget "${HF_ENDPOINT:-https://huggingface.co}/datasets/YWZBrandon/webshop-data/resolve/main/items_human_ins.json"
+wget "${HF_ENDPOINT:-https://huggingface.co}/datasets/ZexueHe/memoryarena/resolve/main/bundled_shopping/data.jsonl"
 cd ..
 
 # Build search engine index

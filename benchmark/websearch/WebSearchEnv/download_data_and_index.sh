@@ -47,7 +47,7 @@ if [ -f "$MEMORY_ARENA_FILE" ]; then
 else
     echo "[INFO] Downloading MemoryArena data.jsonl..."
     wget -O "$MEMORY_ARENA_FILE" \
-        https://huggingface.co/datasets/ZexueHe/memoryarena/resolve/main/progressive_search/data.jsonl
+        ${HF_ENDPOINT:-https://huggingface.co}/datasets/ZexueHe/memoryarena/resolve/main/progressive_search/data.jsonl
     echo "[INFO] MemoryArena data saved to $MEMORY_ARENA_FILE"
 fi
 
