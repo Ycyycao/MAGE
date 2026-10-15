@@ -127,7 +127,7 @@ Without new flags or variables, a run sends the same requests as upstream.
 - **Mirrors.** The data downloads (`benchmark/download_data.sh`, the WebShop and WebSearch setup scripts) go through
   `HF_ENDPOINT` when it is set, e.g. `HF_ENDPOINT=https://hf-mirror.com`.
 - **Any served model.** `bash run.sh math http://127.0.0.1:8100/v1 auto` uses the one model served there.
-  `WORKERS`, `VLLM_EMBEDDING_URL` and `MAGE_JAVA_HOME` override run.sh's defaults; see `bash run.sh --help`.
+  `WORKERS`, `NUM_TASKS` (the first N tasks only), `VLLM_EMBEDDING_URL` and `MAGE_JAVA_HOME` override run.sh's defaults; see `bash run.sh --help`.
 - **Resuming.** `RUN_NAME=<name> bash run.sh ...` writes to `logs/<dataset>/<name>/`; running it again skips the tasks
   already in its `results.csv`.
 - **Sampling.** `EXTRA_ARGS="--temperature 1.0 --top_p 0.95 --top_k 20 --presence_penalty 1.5"` sets the agent's

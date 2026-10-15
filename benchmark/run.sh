@@ -11,6 +11,7 @@ usage() {
     echo "  RUN_NAME      run directory name under logs/<dataset>/; default: a timestamp. Rerunning with the same"
     echo "                name resumes it (tasks already in results.csv are skipped)"
     echo "  WORKERS       concurrent tasks (default 8)"
+    echo "  NUM_TASKS     run only the first N tasks of each dataset (default: the counts below)"
     echo "  VLLM_EMBEDDING_URL, MAGE_JAVA_HOME   websearch: embedding endpoint, JDK home (default: the python env)"
     echo "  EXTRA_ARGS    more evaluate.py flags, e.g. \"--presence_penalty 1.5\""
 }
@@ -75,6 +76,7 @@ for DATASET in "${DATASETS[@]}"; do
         phys) NUM=20; MAX_RETRY_NUM=1; MAX_STEPS=30 ;;
         travelplan) NUM=270; MAX_RETRY_NUM=0; MAX_STEPS=40 ;;
     esac
+    NUM="${NUM_TASKS:-$NUM}"
     tmux new-session -d -s "$SESSION" \
         "set -o pipefail; cd \"$WORKDIR\" && \
         JAVA_HOME=\"$JAVA_HOME\" \
