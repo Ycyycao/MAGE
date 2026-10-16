@@ -19,6 +19,8 @@ class LLMConfig:
         self.seed = None
         self.enable_thinking: bool = True
         self.max_output_tokens: int = 65536
+        # Client-side limit per request; a long thinking output from a busy server can need more than 20 min.
+        self.request_timeout: float = 1200
         self.api_key: str = os.environ.get("OPENAI_API_KEY", "EMPTY")
         self.base_url = config_dict.get("base_url", DEFAULT_BASE_URL)
 

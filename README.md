@@ -134,6 +134,9 @@ Without new flags or variables, a run sends the same requests as upstream.
   sampling (the flags are `evaluate.py`'s). Left out, the server's defaults apply, as upstream.
 - **Long prompts.** When the prompt plus `max_output_tokens` (65536) does not fit the server's window, the request is
   sent again with the output budget that fits, instead of failing.
+- **Slow servers.** The client gives up on a request after 20 minutes and retries it from scratch. A busy server
+  (~45 tokens/s per request with 32 workers) cannot write a 65536-token output in that time, so the same request times
+  out again and again; `EXTRA_ARGS="--request_timeout 7200"` lets it finish.
 - **Errored tasks.** A task that raises is re-run at most `--max_task_errors` times (default 5) instead of forever; it
   stays out of `results.csv`, so the next run with the same `RUN_NAME` tries it again.
 - **@1 per task.** The retries (`--max_retry_num`) are triggered by comparing the answers with the gold ones, so only

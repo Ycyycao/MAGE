@@ -76,7 +76,7 @@ class VLLMLLM(BaseLLM):
             api_key=llm_config.api_key,
             base_url=llm_config.base_url,
             max_retries=0,
-            timeout=1200,  # 20-min timeout to avoid infinite hangs from vLLM
+            timeout=llm_config.request_timeout,  # 20 min by default, to avoid infinite hangs from vLLM
         )
 
     def _server_get(self, path: str, body: dict = None) -> dict:

@@ -236,8 +236,8 @@ def evaluate_travelplan(data, llm, args, log_dir, sample_index):
 
 
 def sampling_config(args):
-    """Agent sampling parameters given on the command line; the ones left out stay with the server's defaults."""
-    names = ("temperature", "top_p", "top_k", "presence_penalty")
+    """Agent LLM settings given on the command line (sampling, request timeout); the ones left out keep their defaults."""
+    names = ("temperature", "top_p", "top_k", "presence_penalty", "request_timeout")
     return {name: getattr(args, name) for name in names if getattr(args, name) is not None}
 
 
@@ -301,6 +301,9 @@ if __name__ == "__main__":
                              "so a later run with the same --log_dir tries it again)")
     for name, kind in (("temperature", float), ("top_p", float), ("top_k", int), ("presence_penalty", float)):
         parser.add_argument(f"--{name}", type=kind, help="Agent sampling; omitted = the server's default")
+    parser.add_argument("--request_timeout", type=float,
+                        help="Seconds before an agent LLM request is abandoned and retried (default 1200); raise it "
+                             "when long outputs on a busy server take longer")
     args = parser.parse_args()
     if args.llm == "auto":
         args.llm = served_model(args.base_url)

@@ -121,8 +121,16 @@ def test_llm_auto_reads_the_served_model(server):
 
 
 def test_sampling_config_keeps_only_given_flags():
-    args = SimpleNamespace(temperature=None, top_p=None, top_k=20, presence_penalty=1.5)
+    args = SimpleNamespace(temperature=None, top_p=None, top_k=20, presence_penalty=1.5, request_timeout=None)
     assert evaluate.sampling_config(args) == {"top_k": 20, "presence_penalty": 1.5}
+    args.request_timeout = 7200.0
+    assert evaluate.sampling_config(args)["request_timeout"] == 7200.0
+
+
+def test_request_timeout_defaults_to_the_official_20_minutes():
+    assert VLLMLLM(LLMConfig({"llm_name": "m", "base_url": "http://server/v1"})).client.timeout == 1200
+    llm = VLLMLLM(LLMConfig({"llm_name": "m", "base_url": "http://server/v1", "request_timeout": 7200}))
+    assert llm.client.timeout == 7200
 
 
 def test_errored_tasks_are_retried_then_given_up():
