@@ -106,3 +106,25 @@ def test_a_task_that_raises_still_leaves_its_trajectory(tmp_path):
         evaluate._evaluate_task = original
     assert read(str(path) + ".gz")[0]["task_id"] == "travel:3"
     assert trajectory.current() is None
+
+
+def test_finish_task_writes_the_result_with_the_scorers_checks(tmp_path):
+    scoring = evaluate.dataset_module("travelplan", "TravelPlanEnv.scoring")
+    base = [{"days": 1, "breakfast": "A, Rome", "lunch": "B, Rome", "dinner": "C, Rome", "accommodation": "H, Rome",
+             "transportation": "-"}]
+    gold = [dict(base[0], lunch="L, Rome", dinner="D, Rome")]
+    submitted = [dict(base[0], lunch="L, Rome", dinner="X, Rome", selected_options={"lunch": {}})]
+    result = {"sub_successes": [0], "answer_pairs": [[gold, submitted]]}
+    checks = evaluate.travel_checks(scoring, base, result)
+    assert checks == [[{"day": 1, "slot": "lunch", "gold": "L, Rome", "submitted": "L, Rome", "match": True},
+                       {"day": 1, "slot": "dinner", "gold": "D, Rome", "submitted": "X, Rome", "match": False}]]
+
+    path = tmp_path / "task_9_traj.jsonl"
+    state = SimpleNamespace(judge_count=0)
+    with trajectory.recording(path, {"task_id": "travel:9"}):
+        evaluate.finish_task("travelplan", 9, [0], result["answer_pairs"], state, backend(), tmp_path,
+                             details={"checks": checks})
+    head, rec = read(str(path) + ".gz")
+    assert head["schema"] == trajectory.SCHEMA
+    assert (rec["kind"], rec["sub_scores"], rec["task_success"], rec["judge_round"]) == ("result", [0], False, 0)
+    assert rec["checks"] == checks and rec["answer_pairs"] == result["answer_pairs"]

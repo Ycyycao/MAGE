@@ -47,7 +47,8 @@ def task_success(dataset, scores):
     return scores[-1] >= 1
 
 
-def finish_task(dataset, task_id, scores, pairs, state, llm, log_dir):
+def finish_task(dataset, task_id, scores, pairs, state, llm, log_dir, details=None):
+    """details: the dataset's scoring details, kept in the trajectory's result record."""
     scores = [int(score >= 1) for score in scores]
     suffix = f"_retry{state.judge_count}" if state.judge_count else ""
     mismatches = [index + 1 for index, score in enumerate(scores) if not score]
@@ -65,6 +66,9 @@ def finish_task(dataset, task_id, scores, pairs, state, llm, log_dir):
         f"Groundtruth answers: {[pair[0] for pair in pairs]}\n"
         f"Agent answers: {[pair[1] for pair in pairs]}"
     )
+    if (traj := trajectory.current()) is not None:
+        traj.result(sub_scores=scores, task_success=task_success(dataset, scores), answer_pairs=pairs,
+                    judge_round=state.judge_count, **(details or {}))
     llm.save_trace(str(Path(log_dir) / f"task_{task_id}_token_usage{suffix}.json"))
     llm.reset_trace()
     return {
@@ -233,7 +237,19 @@ def evaluate_travelplan(data, llm, args, log_dir, sample_index):
 
     active = state.get_active_results()
     result = scoring.score_travelers(data["base_person"]["daily_plans"], answers, active)
-    return finish_task("travelplan", data["id"], result["sub_successes"], result["answer_pairs"], state, llm, log_dir)
+    return finish_task("travelplan", data["id"], result["sub_successes"], result["answer_pairs"], state, llm, log_dir,
+                       details={"questions": queries,
+                                "checks": travel_checks(scoring, data["base_person"]["daily_plans"], result)})
+
+
+def travel_checks(scoring, base_plan, result):
+    """Each traveler's scored slots as the scorer saw them: (day, slot, gold, submitted, match)."""
+    base = scoring.plans_to_dict(base_plan)
+    return [[{"day": day, "slot": slot, "gold": gold, "submitted": submitted, "match": match}
+             for day, slot, gold, submitted, match in scoring.evaluate_session(
+                 base, scoring.plans_to_dict(reference), scoring.plans_to_dict(prediction),
+                 "completed")["constraints"]]
+            for reference, prediction in result["answer_pairs"]]
 
 
 def sampling_config(args):

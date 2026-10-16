@@ -1,12 +1,15 @@
 """Full trajectory of one task, in AgentMemory's format (hybrid_mem/traj.py there), so its tools read MAGE runs too.
 
 One JSON object per line in <run dir>/task_<id>_traj.jsonl while the task runs, gzipped to .jsonl.gz when it ends:
-- {"kind": "task", ...header}: first line.
+- {"kind": "task", "schema", ...header}: first line.
 - {"kind": "call", "role", "messages", "output", "reasoning", "prompt_tokens", "completion_tokens"}: every LLM call
   made from the task's thread. role is "agent" for the action step (BaseAgent.llm_layer), else the name of the
   function that called the LLM (e.g. verify_llm), so each auxiliary call says what it was for.
 - {"kind": "step", "tool", "arg", "obs"}: every action the agent logged, with its full observation. An observation
   logged without an action (the backtrace that restarts a subtask after a failed verification) has tool "".
+- {"kind": "result", "sub_scores", "task_success", "answer_pairs", ...}: after the task is judged (each judge round
+  on a gold-triggered retry), with the dataset's scoring details (travelplan: `checks`).
+The formats are specified in AgentMemory's docs/conventions/trajectory-format.md (schema SCHEMA).
 Records carry `subtask` (0-based) and `step` (1-based, counted within the subtask; an action's LLM call has the same
 step as the action); `attempt` is added on the gold-triggered retries (--max_retry_num), whose subtasks run again.
 A message text of TEXT_REF_MIN characters or more is written once as {"sha", "text"} and as {"ref": sha} after that.
@@ -23,6 +26,7 @@ import threading
 import time
 from contextlib import contextmanager
 
+SCHEMA = 1
 TEXT_REF_MIN = 1000
 _local = threading.local()
 _SUBTASK_LOG = re.compile(r"task_\d+_subtask_(\d+)(?:_retry(\d+))?\.log$")
@@ -51,7 +55,7 @@ class Trajectory:
         self.subtask, self.step, self.attempt, self.pending = None, None, 0, None
         with open(self.path, "w") as stream:
             stream.write("")
-        self._append({"kind": "task", **header})
+        self._append({"kind": "task", "schema": SCHEMA, **header})
 
     def start_subtask(self, log_file_name):
         """A subtask agent starts; its index (and retry) come from its log file name, task_<id>_subtask_<k>[_retry<r>].log."""
@@ -70,6 +74,9 @@ class Trajectory:
         self.pending = None
         if self.step is not None:
             self.step += 1
+
+    def result(self, **fields):
+        self.write({"kind": "result", **fields})
 
     def write(self, rec):
         with self.lock:
