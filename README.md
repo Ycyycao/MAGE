@@ -134,6 +134,10 @@ Without new flags or variables, a run sends the same requests as upstream.
   sampling (the flags are `evaluate.py`'s). Left out, the server's defaults apply, as upstream.
 - **Long prompts.** When the prompt plus `max_output_tokens` (65536) does not fit the server's window, the request is
   sent again with the output budget that fits, instead of failing.
+- **Full trajectories.** Each task also writes `task_<id>_traj.jsonl.gz`: every LLM call (system and user messages,
+  raw output, reasoning, tokens, and which function made it: `agent` for an action, e.g. `verify_llm` otherwise) and
+  every action with its untruncated observation, by subtask and step, in AgentMemory's trajectory format
+  (`agentcore/trajectory.py`). It only reads what the backend and the logger already see; `--no_traj` turns it off.
 - **Slow servers.** The client gives up on a request after 20 minutes and retries it from scratch. A busy server
   (~45 tokens/s per request with 32 workers) cannot write a 65536-token output in that time, so the same request times
   out again and again; `EXTRA_ARGS="--request_timeout 7200"` lets it finish.

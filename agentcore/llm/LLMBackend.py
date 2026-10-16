@@ -1,10 +1,12 @@
 import json
 import re
+import sys
 import time
 import urllib.request
 
 from openai import BadRequestError, OpenAI
 
+from agentcore import trajectory
 from agentcore.llm.LLMConfig import LLMConfig
 
 
@@ -101,6 +103,15 @@ class VLLMLLM(BaseLLM):
         return window - prompt
 
     @staticmethod
+    def _caller_role() -> str:
+        """"agent" for the action step (BaseAgent.llm_layer), else the function that called the LLM."""
+        frame = sys._getframe(1)
+        while frame is not None and frame.f_code.co_filename == __file__:
+            frame = frame.f_back
+        name = frame.f_code.co_name if frame is not None else "llm"
+        return "agent" if name == "llm_layer" else name
+
+    @staticmethod
     def _extract_think_block(text: str) -> tuple:
         """Extract <think>...</think> block and return (thinking, stripped_content)."""
         m = re.search(r"<think>(.*?)</think>\s*", text, flags=re.DOTALL)
@@ -153,6 +164,10 @@ class VLLMLLM(BaseLLM):
 
                 # vLLM with --reasoning-parser puts thinking in reasoning_content
                 reasoning_content = getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", None)
+                traj = trajectory.current()
+                if traj is not None:
+                    traj.call(self._caller_role(), messages, msg.content or "", reasoning_content or "",
+                              usage.prompt_tokens, usage.completion_tokens)
                 if reasoning_content:
                     self._record_trace_with_thinking(
                         usage.prompt_tokens, usage.completion_tokens,

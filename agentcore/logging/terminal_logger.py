@@ -1,3 +1,4 @@
+from agentcore import trajectory
 from agentcore.commons import AgentAct, TaskPackage
 from agentcore.logging.utils import *
 from agentcore.utils import bcolors
@@ -43,6 +44,8 @@ class AgentLogger(BaseAgentLogger):
             f.write(str_color_remove(log_str) + "\n")
 
     def receive_task(self, task: TaskPackage, agent_name: str):
+        if (traj := trajectory.current()) is not None:
+            traj.start_subtask(self.log_file_name)
         task_str = (
             f"""[\n\tTask ID: {task.task_id}\n\tInstruction: {task.instruction}\n]"""
         )
@@ -63,6 +66,8 @@ class AgentLogger(BaseAgentLogger):
         self.__save_log__(log_str=log_str)
 
     def take_action(self, action: AgentAct, agent_name: str, step_idx: int):
+        if (traj := trajectory.current()) is not None:
+            traj.action(action.name, action.params)
         act_str = f"""{{\n\tname: {action.name}\n\tparams: {action.params}\n}}"""
         log_str = f"""Agent {self.__color_agent_name__(agent_name)} takes {step_idx}-step {bcolors.UNDERLINE}Action{bcolors.ENDC}:\n"""
         log_str += f"""{self.__color_act_str__(act_str)}"""
@@ -73,6 +78,8 @@ class AgentLogger(BaseAgentLogger):
         self.__save_log__(log_str)
 
     def get_obs(self, obs: str):
+        if (traj := trajectory.current()) is not None:
+            traj.observation(obs)  # before the OBS_OFFSET cut below
         if len(obs) > self.OBS_OFFSET:
             obs = obs[: self.OBS_OFFSET] + "[TLDR]"
         log_str = f"""Observation: {self.__color_obs_str__(obs)}"""

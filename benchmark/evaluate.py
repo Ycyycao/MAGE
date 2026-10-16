@@ -17,6 +17,7 @@ PROJECT_ROOT = SCRIPT_DIR.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from agentcore import trajectory
 from agentcore.llm.LLMBackend import get_llm_backend
 from agentcore.llm.LLMConfig import DEFAULT_BASE_URL, DEFAULT_LLM_NAME, LLMConfig
 from agentcore.logging.terminal_logger import AgentLogger
@@ -271,7 +272,20 @@ def run_with_retries(pending, run_one, workers, max_errors):
     return given_up
 
 
+TRAJ_DOMAINS = {"travelplan": "travel", "webshop": "shopping", "websearch": "search"}  # AgentMemory's task_id prefixes
+
+
 def evaluate_task(data, args, log_dir, sample_index, resources):
+    if args.no_traj:
+        return _evaluate_task(data, args, log_dir, sample_index, resources)
+    header = {"task_id": f"{TRAJ_DOMAINS.get(args.dataset, args.dataset)}:{data['id']}", "method": "mage_official",
+              "model": args.llm, "harness": "MAGE official (Ycyycao/MAGE ycyycao/compat)", "thinking": True,
+              "max_steps": args.max_steps}
+    with trajectory.recording(Path(log_dir) / f"task_{data['id']}_traj.jsonl", header):
+        return _evaluate_task(data, args, log_dir, sample_index, resources)
+
+
+def _evaluate_task(data, args, log_dir, sample_index, resources):
     # Each worker owns its LLM trace, agent state and mutable environment.
     llm = get_llm_backend(LLMConfig({"llm_name": args.llm, "base_url": args.base_url, **sampling_config(args)}))
     with llm.client:
@@ -301,6 +315,9 @@ if __name__ == "__main__":
                              "so a later run with the same --log_dir tries it again)")
     for name, kind in (("temperature", float), ("top_p", float), ("top_k", int), ("presence_penalty", float)):
         parser.add_argument(f"--{name}", type=kind, help="Agent sampling; omitted = the server's default")
+    parser.add_argument("--no_traj", action="store_true",
+                        help="Do not write task_<id>_traj.jsonl.gz (every LLM call and action in AgentMemory's "
+                             "trajectory format; see agentcore/trajectory.py)")
     parser.add_argument("--request_timeout", type=float,
                         help="Seconds before an agent LLM request is abandoned and retried (default 1200); raise it "
                              "when long outputs on a busy server take longer")
