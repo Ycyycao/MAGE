@@ -8,7 +8,8 @@ One JSON object per line in <run dir>/task_<id>_traj.jsonl while the task runs, 
 - {"kind": "step", "tool", "arg", "obs"}: every action the agent logged, with its full observation. An observation
   logged without an action (the backtrace that restarts a subtask after a failed verification) has tool "".
 - {"kind": "result", "sub_scores", "task_success", "answer_pairs", ...}: after the task is judged (each judge round
-  on a gold-triggered retry), with the dataset's scoring details (travelplan: `checks`).
+  on a gold-triggered retry), with the dataset's details (travelplan: `base_person`, the fixed first
+  traveler every subtask is given; `questions`; `checks`).
 The formats are specified in AgentMemory's docs/conventions/trajectory-format.md (schema SCHEMA).
 Records carry `subtask` (0-based) and `step` (1-based, counted within the subtask; an action's LLM call has the same
 step as the action); `attempt` is added on the gold-triggered retries (--max_retry_num), whose subtasks run again.

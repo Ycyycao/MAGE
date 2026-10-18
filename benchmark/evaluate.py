@@ -238,7 +238,7 @@ def evaluate_travelplan(data, llm, args, log_dir, sample_index):
     active = state.get_active_results()
     result = scoring.score_travelers(data["base_person"]["daily_plans"], answers, active)
     return finish_task("travelplan", data["id"], result["sub_successes"], result["answer_pairs"], state, llm, log_dir,
-                       details={"questions": queries,
+                       details={"base_person": data["base_person"], "questions": queries,
                                 "checks": travel_checks(scoring, data["base_person"]["daily_plans"], result)})
 
 
